@@ -106,6 +106,12 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 	if err != nil {
 		log.Errorf("failed to resolve bindings :%v", err)
 	}
+
+	err2, committer := getCommitter(ctx, build, g, webhookURL)
+	if err2 != nil {
+		log.Errorf("failed to get committer from commit ref :%v", err2)
+	}
+	build.Substitutions["GH_COMMITTER_LOGIN"] = committer
 	g.tmplView = &notifiers.TemplateView{
 		Build:  &notifiers.BuildView{Build: build},
 		Params: bindings,
@@ -147,6 +153,42 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 
 	log.V(2).Infoln("send HTTP request successfully")
 	return nil
+}
+
+func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, webhookURL string) (error, string) {
+	// Lookup committer and set it to .Build.Substitutions.GH_COMMITTER_LOGIN
+	refName := build.Substitutions["REF_NAME"]
+	if refName == "" {
+		return fmt.Errorf("no ref name found in substitutions"), ""
+	}
+	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(g.githubRepo, build), "c158a7fa9f346808411630c9fb1b911691fcaaca")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create a new HTTP request: %w", err), ""
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", g.githubToken))
+	req.Header.Set("User-Agent", "GCB-Notifier/0.1 (http)")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make HTTP request: %w", err), ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Warningf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, webhookURL)
+	}
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return fmt.Errorf("failed to decode JSON response: %w", err), ""
+	}
+	// Use author field from GitHub to avoid case where committer is "web-flow" which is assigned whenever someone edits on github.com
+	author := data["author"].(map[string]interface{})
+	if author["type"].(string) == "User" {
+		return nil, author["login"].(string)
+	}
+	return nil, ""
 }
 
 func GetGithubRepo(configGithubRepo string, build *cbpb.Build) string {

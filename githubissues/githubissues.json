@@ -1,4 +1,5 @@
 {
+    "assignees":["{{.Build.Substitutions.GH_COMMITTER_LOGIN}}"],
     "title": "Cloud Build [{{.Build.ProjectId}}]: {{.Build.Status}}",
     "body": "Cloud Build {{.Build.ProjectId}} {{.Build.Id}} status: **{{.Build.Status}}**\n\n{{if .Build.BuildTriggerId}}Trigger ID: {{.Build.BuildTriggerId}}{{end}}\n\n[View Logs]({{.Build.LogUrl}})"
 }
