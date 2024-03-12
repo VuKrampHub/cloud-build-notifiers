@@ -107,7 +107,7 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 		log.Errorf("failed to resolve bindings :%v", err)
 	}
 
-	getAndSetCommitterInfo(ctx, build, g, webhookURL)
+	GetAndSetCommitterInfo(ctx, build, g, githubApiEndpoint)
 
 	g.tmplView = &notifiers.TemplateView{
 		Build:  &notifiers.BuildView{Build: build},
@@ -134,9 +134,7 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 		return fmt.Errorf("failed to create a new HTTP request: %w", err)
 	}
 
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("Authorization", fmt.Sprintf("token %s", g.githubToken))
-	req.Header.Set("User-Agent", "GCB-Notifier/0.1 (http)")
+	setHeaders(req, g)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -152,28 +150,32 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 	return nil
 }
 
-func getAndSetCommitterInfo(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, webhookURL string) {
-	err2, committer := getCommitter(ctx, build, g, webhookURL)
+func setHeaders(req *http.Request, g *githubissuesNotifier) {
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("Authorization", fmt.Sprintf("token %s", g.githubToken))
+	req.Header.Set("User-Agent", "GCB-Notifier/0.1 (http)")
+}
+
+func GetAndSetCommitterInfo(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, githubApiEndpoint string) {
+	err2, committer := getCommitter(ctx, build, g, githubApiEndpoint)
 	if err2 != nil {
 		log.Warningf("failed to get committer from commit ref :%v", err2)
 	}
 	build.Substitutions["GH_COMMITTER_LOGIN"] = committer
 }
 
-func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, webhookURL string) (error, string) {
+func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, githubApiEndpoint string) (error, string) {
 	// Lookup committer and set it to .Build.Substitutions.GH_COMMITTER_LOGIN
 	refName := build.Substitutions["REF_NAME"]
 	if refName == "" {
 		return fmt.Errorf("no ref name found in substitutions"), ""
 	}
-	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(g.githubRepo, build), "c158a7fa9f346808411630c9fb1b911691fcaaca")
+	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(g.githubRepo, build), refName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create a new HTTP request: %w", err), ""
 	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("Authorization", fmt.Sprintf("token %s", g.githubToken))
-	req.Header.Set("User-Agent", "GCB-Notifier/0.1 (http)")
+	setHeaders(req, g)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -182,16 +184,15 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Warningf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, webhookURL)
+		return fmt.Errorf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, commitURL), ""
 	}
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return fmt.Errorf("failed to decode JSON response: %w", err), ""
 	}
 	// Use author field from GitHub to avoid case where committer is "web-flow" which is assigned whenever someone edits on github.com
-	author := data["author"].(map[string]interface{})
-	if author["type"].(string) == "User" {
-		return nil, author["login"].(string)
+	if data != nil && data["author"] != nil && data["author"].(map[string]interface{})["type"].(string) == "User" {
+		return nil, data["author"].(map[string]interface{})["login"].(string)
 	}
 	return nil, ""
 }

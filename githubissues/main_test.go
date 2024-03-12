@@ -17,6 +17,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"text/template"
@@ -39,7 +41,7 @@ const issuePayload = `
     "body": "Cloud Build {{.Build.ProjectId}} {{.Build.BuildTriggerId}} status: **{{.Build.Status}}**\n\n[View Logs]({{.Build.LogUrl}})"
 }`
 
-func TestDefaultIssueTempate(t *testing.T) {
+func TestDefaultIssueTemplate(t *testing.T) {
 
 	tmpl, err := template.New("issue_template").Parse(issuePayload)
 	if err != nil {
@@ -169,5 +171,35 @@ func TestGetGithubRepo(t *testing.T) {
 	}
 	if got, want := GetGithubRepo("config/repo", build), "somename/somerepo"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGetAndSetCommitterInfo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/kramphub/repo/commits/main" {
+			t.Errorf("Expected to request '/kramphub/repo/commits/main', got: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"author": {"login": "human-committer", "type": "User"}}`))
+	}))
+	defer server.Close()
+
+	build := &cbpb.Build{
+		Substitutions: map[string]string{
+			"REF_NAME":       "main",
+			"REPO_FULL_NAME": "kramphub/repo",
+		},
+	}
+	g := githubissuesNotifier{
+		filter:      nil,
+		tmpl:        nil,
+		githubToken: "",
+		githubRepo:  "",
+		br:          nil,
+		tmplView:    nil,
+	}
+	GetAndSetCommitterInfo(context.Background(), build, &g, server.URL)
+	if build.Substitutions["GH_COMMITTER_LOGIN"] != "human-committer" {
+		t.Errorf("Failed to get committer login")
 	}
 }
