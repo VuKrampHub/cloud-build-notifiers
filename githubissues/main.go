@@ -107,11 +107,8 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 		log.Errorf("failed to resolve bindings :%v", err)
 	}
 
-	err2, committer := getCommitter(ctx, build, g, webhookURL)
-	if err2 != nil {
-		log.Errorf("failed to get committer from commit ref :%v", err2)
-	}
-	build.Substitutions["GH_COMMITTER_LOGIN"] = committer
+	getAndSetCommitterInfo(ctx, build, g, webhookURL)
+
 	g.tmplView = &notifiers.TemplateView{
 		Build:  &notifiers.BuildView{Build: build},
 		Params: bindings,
@@ -153,6 +150,14 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 
 	log.V(2).Infoln("send HTTP request successfully")
 	return nil
+}
+
+func getAndSetCommitterInfo(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, webhookURL string) {
+	err2, committer := getCommitter(ctx, build, g, webhookURL)
+	if err2 != nil {
+		log.Warningf("failed to get committer from commit ref :%v", err2)
+	}
+	build.Substitutions["GH_COMMITTER_LOGIN"] = committer
 }
 
 func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, webhookURL string) (error, string) {
