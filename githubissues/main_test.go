@@ -176,11 +176,15 @@ func TestGetGithubRepo(t *testing.T) {
 
 func TestGetAndSetCommitterInfo(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/kramphub/repo/commits/main" {
-			t.Errorf("Expected to request '/kramphub/repo/commits/main', got: %s", r.URL.Path)
+		if !strings.HasPrefix(r.URL.Path, "/kramphub/repo/") {
+			t.Errorf("Expected to request '/kramphub/repo/*', got: %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"author": {"login": "human-committer", "type": "User"}}`))
+		if strings.Contains(r.URL.Path, "commits") {
+			w.Write([]byte(`{"author": {"login": "human-committer", "type": "User"}}`))
+		} else if strings.Contains(r.URL.Path, "releases") {
+			w.Write([]byte(`{"author": {"login": "human-tagger", "type": "User"}}`))
+		}
 	}))
 	defer server.Close()
 
@@ -188,6 +192,7 @@ func TestGetAndSetCommitterInfo(t *testing.T) {
 		Substitutions: map[string]string{
 			"REF_NAME":       "main",
 			"REPO_FULL_NAME": "kramphub/repo",
+			"BRANCH_NAME":    "main",
 		},
 	}
 	g := githubissuesNotifier{
@@ -201,5 +206,16 @@ func TestGetAndSetCommitterInfo(t *testing.T) {
 	GetAndSetCommitterInfo(context.Background(), build, &g, server.URL)
 	if build.Substitutions["GH_COMMITTER_LOGIN"] != "human-committer" {
 		t.Errorf("Failed to get committer login")
+	}
+	build = &cbpb.Build{
+		Substitutions: map[string]string{
+			"REF_NAME":       "tag",
+			"REPO_FULL_NAME": "kramphub/repo",
+			"TAG_NAME":       "main",
+		},
+	}
+	GetAndSetCommitterInfo(context.Background(), build, &g, server.URL)
+	if build.Substitutions["GH_COMMITTER_LOGIN"] != "human-tagger" {
+		t.Errorf("Failed to get tagger login")
 	}
 }

@@ -175,8 +175,14 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 	if refName == "" {
 		return fmt.Errorf("no ref name found in substitutions"), ""
 	}
-	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(build), refName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
+	webhookURL := ""
+	// if tag, use /releases/tags/{tag} instead of /commits/{refName}
+	if build.Substitutions["TAG_NAME"] != "" {
+		webhookURL = fmt.Sprintf("%s/%s/releases/tags/%s", githubApiEndpoint, GetGithubRepo(build), refName)
+	} else {
+		webhookURL = fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(build), refName)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, webhookURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create a new HTTP request: %w", err), ""
 	}
@@ -189,7 +195,7 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, commitURL), ""
+		return fmt.Errorf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, webhookURL), ""
 	}
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
