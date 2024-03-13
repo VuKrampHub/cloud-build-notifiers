@@ -98,7 +98,12 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 		return nil
 	}
 
-	webhookURL := fmt.Sprintf("%s/%s/issues", githubApiEndpoint, GetGithubRepo(g.githubRepo, build))
+	repo := GetGithubRepo(build)
+	if repo == "" {
+		log.Warningf("could not determine GitHub repository from build, skipping notification")
+		return nil
+	}
+	webhookURL := fmt.Sprintf("%s/%s/issues", githubApiEndpoint, repo)
 
 	log.Infof("sending GitHub Issue webhook for Build %q (status: %q) to url %q", build.Id, build.Status, webhookURL)
 
@@ -170,7 +175,7 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 	if refName == "" {
 		return fmt.Errorf("no ref name found in substitutions"), ""
 	}
-	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(g.githubRepo, build), refName)
+	commitURL := fmt.Sprintf("%s/%s/commits/%s", githubApiEndpoint, GetGithubRepo(build), refName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, commitURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create a new HTTP request: %w", err), ""
@@ -197,11 +202,11 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 	return nil, ""
 }
 
-func GetGithubRepo(configGithubRepo string, build *cbpb.Build) string {
+func GetGithubRepo(build *cbpb.Build) string {
 	if build.Substitutions != nil && build.Substitutions["REPO_FULL_NAME"] != "" {
 		// return repo full name if it's available
 		// e.g. "GoogleCloudPlatform/cloud-build-notifiers"
 		return build.Substitutions["REPO_FULL_NAME"]
 	}
-	return configGithubRepo
+	return ""
 }
