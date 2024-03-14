@@ -181,7 +181,7 @@ func TestGetAndSetCommitterInfo(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		if strings.Contains(r.URL.Path, "commits") {
-			w.Write([]byte(`{"author": {"login": "human-committer", "type": "User"}}`))
+			w.Write([]byte(`{"commit": {"author": {"name": "human-committer"}}}`))
 		} else if strings.Contains(r.URL.Path, "releases") {
 			w.Write([]byte(`{"author": {"login": "human-tagger", "type": "User"}}`))
 		}

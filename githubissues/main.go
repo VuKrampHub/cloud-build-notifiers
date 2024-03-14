@@ -202,8 +202,16 @@ func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifie
 		return fmt.Errorf("failed to decode JSON response: %w", err), ""
 	}
 	// Use author field from GitHub to avoid case where committer is "web-flow" which is assigned whenever someone edits on github.com
-	if data != nil && data["author"] != nil && data["author"].(map[string]interface{})["type"].(string) == "User" {
-		return nil, data["author"].(map[string]interface{})["login"].(string)
+	if data != nil {
+		if data["author"] != nil && data["author"].(map[string]interface{})["type"].(string) == "User" {
+			return nil, data["author"].(map[string]interface{})["login"].(string)
+		} else if data["commit"] != nil {
+			if data["commit"].(map[string]interface{})["committer"] != nil {
+				return nil, data["commit"].(map[string]interface{})["committer"].(map[string]interface{})["name"].(string)
+			} else if data["commit"].(map[string]interface{})["author"] != nil {
+				return nil, data["commit"].(map[string]interface{})["author"].(map[string]interface{})["name"].(string)
+			}
+		}
 	}
 	return nil, ""
 }
