@@ -153,8 +153,8 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 
 	log.V(2).Infoln("send create issue HTTP request successfully")
 
-	// If the issue is created, close it
-	if resp.StatusCode == http.StatusCreated {
+	// If the issue is created, close it by default, unless disabled
+	if val, ok := notifiers.GetEnv("DISABLE_AUTO_CLOSE"); (!ok || val != "true") && resp.StatusCode == http.StatusCreated {
 		var data map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			log.Warningf("failed to decode JSON response: %v", err)
