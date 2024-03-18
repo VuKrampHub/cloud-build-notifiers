@@ -151,7 +151,34 @@ func (g *githubissuesNotifier) SendNotification(ctx context.Context, build *cbpb
 		log.Warningf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, webhookURL)
 	}
 
-	log.V(2).Infoln("send HTTP request successfully")
+	log.V(2).Infoln("send create issue HTTP request successfully")
+
+	// If the issue is created, close it
+	if resp.StatusCode == http.StatusCreated {
+		var data map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			log.Warningf("failed to decode JSON response: %v", err)
+		}
+		if data["state"] != nil && data["state"].(string) == "open" {
+			issueURL := data["url"].(string)
+			req, err := http.NewRequest(http.MethodPatch, issueURL, strings.NewReader(`{"state": "closed"}`))
+			if err != nil {
+				log.Warningf("failed to create a new HTTP request: %v", err)
+			}
+			setHeaders(req, g)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return fmt.Errorf("failed to make HTTP request: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Warningf("got a non-OK response status %q (%d) from %q", resp.Status, resp.StatusCode, webhookURL)
+			}
+
+			log.V(2).Infoln("send close issue HTTP request successfully")
+		}
+	}
 	return nil
 }
 
