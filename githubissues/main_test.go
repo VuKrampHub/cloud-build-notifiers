@@ -210,7 +210,7 @@ func TestGetAndSetCommitterInfo(t *testing.T) {
 
 	build := &cbpb.Build{
 		Substitutions: map[string]string{
-			"REF_NAME":       "main",
+			"REVISION_ID":    "main",
 			"REPO_FULL_NAME": "kramphub/repo",
 			"BRANCH_NAME":    "main",
 		},
@@ -229,7 +229,7 @@ func TestGetAndSetCommitterInfo(t *testing.T) {
 	}
 	build = &cbpb.Build{
 		Substitutions: map[string]string{
-			"REF_NAME":       "tag",
+			"REVISION_ID":    "tag",
 			"REPO_FULL_NAME": "kramphub/repo",
 			"TAG_NAME":       "main",
 		},

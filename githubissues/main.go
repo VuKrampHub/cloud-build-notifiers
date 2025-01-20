@@ -198,7 +198,7 @@ func GetAndSetCommitterInfo(ctx context.Context, build *cbpb.Build, g *githubiss
 
 func getCommitter(ctx context.Context, build *cbpb.Build, g *githubissuesNotifier, githubApiEndpoint string) (error, string) {
 	// Lookup committer and set it to .Build.Substitutions.GH_COMMITTER_LOGIN
-	refName := build.Substitutions["REF_NAME"]
+	refName := build.Substitutions["REVISION_ID"]
 	if refName == "" {
 		return fmt.Errorf("no ref name found in substitutions"), ""
 	}
